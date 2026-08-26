@@ -6,6 +6,9 @@ from google import genai
 load_dotenv()
 
 API_KEY = os.getenv("GEMINI_API_KEY")
+print("GEMINI_API_KEY encontrada:", bool(API_KEY))
+print("Longitud de la clave:", len(API_KEY) if API_KEY else 0)
+print("Modelo configurado:", os.getenv("GEMINI_MODEL"))
 
 if not API_KEY:
     raise ValueError(

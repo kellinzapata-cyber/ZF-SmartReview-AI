@@ -5,8 +5,16 @@ from google import genai
 
 load_dotenv()
 
+API_KEY = os.getenv("GEMINI_API_KEY")
+
+if not API_KEY:
+    raise ValueError(
+        "ERROR: No se encontró GEMINI_API_KEY. "
+        "Verifica los Secrets de Streamlit."
+    )
+
 client = genai.Client(
-    api_key=os.getenv("GEMINI_API_KEY")
+    api_key=API_KEY
 )
 
 PROMPTS = {

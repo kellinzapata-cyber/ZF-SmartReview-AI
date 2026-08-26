@@ -1,5 +1,6 @@
 import re
 import unicodedata
+
 from services.rules import REGLAS
 
 
@@ -12,6 +13,10 @@ def buscar(documentos, tipo):
     return None
 
 
+# ==========================================================
+# QUITAR TILDES
+# ==========================================================
+
 def quitar_tildes(texto):
 
     texto = unicodedata.normalize("NFD", texto)
@@ -23,6 +28,10 @@ def quitar_tildes(texto):
     )
 
 
+# ==========================================================
+# NORMALIZACIÓN GENERAL
+# ==========================================================
+
 def limpiar_texto(valor):
 
     if valor is None:
@@ -30,10 +39,12 @@ def limpiar_texto(valor):
 
     valor = str(valor).strip().upper()
 
-    # Quitar tildes
+    if valor == "":
+        return None
+
     valor = quitar_tildes(valor)
 
-    # Normalizar razón social
+    # Razón social
     valor = valor.replace("S.A.S.", "SAS")
     valor = valor.replace("S.A.S", "SAS")
     valor = valor.replace("SAS.", "SAS")
@@ -41,7 +52,7 @@ def limpiar_texto(valor):
     valor = valor.replace("S.A.", "SA")
     valor = valor.replace("S.A", "SA")
 
-    # Normalizar tipos de vías
+    # Direcciones
     valor = valor.replace("CARRERA", "CR")
     valor = valor.replace("CRA.", "CR")
     valor = valor.replace("CRA", "CR")
@@ -52,31 +63,35 @@ def limpiar_texto(valor):
     valor = valor.replace("AVENIDA", "AV")
     valor = valor.replace("AV.", "AV")
 
-    # Normalizar números de dirección
+    # Símbolos comunes
     valor = valor.replace("N°", " ")
     valor = valor.replace("NO.", " ")
     valor = valor.replace("NO ", " ")
     valor = valor.replace("#", " ")
 
-    # Eliminar ubicación adicional
+    # Ubicación adicional
     valor = valor.replace("MEDELLIN", "")
     valor = valor.replace("COLOMBIA", "")
 
     # Eliminar puntuación
     valor = re.sub(r"[.,;:]", " ", valor)
 
-    # Separar letras y números
+    # Guiones como separadores
+    valor = valor.replace("-", " ")
+
+    # Separar números y letras
     valor = re.sub(r"(\d)([A-Z])", r"\1 \2", valor)
     valor = re.sub(r"([A-Z])(\d)", r"\1 \2", valor)
 
-    # Eliminar guiones como separadores
-    valor = valor.replace("-", " ")
-
-    # Quitar espacios múltiples
+    # Espacios múltiples
     valor = re.sub(r"\s+", " ", valor)
 
     return valor.strip()
 
+
+# ==========================================================
+# NIT
+# ==========================================================
 
 def limpiar_nit(valor):
 
@@ -85,21 +100,35 @@ def limpiar_nit(valor):
 
     valor = str(valor).strip()
 
-    # Eliminar todo excepto números
-    valor = re.sub(r"[^0-9]", "", valor)
-
-    if not valor:
+    if valor == "":
         return None
 
-    # Si tiene dígito de verificación
-    # Un NIT colombiano normalmente tiene 9 dígitos
-    # + 1 dígito de verificación
+    # Si viene con dígito de verificación separado por guion
+    # Ejemplo: 890.916.575-4
+    if "-" in valor:
 
-    if len(valor) == 10:
-        valor = valor[:9]
+        valor = valor.split("-")[0]
+
+    # Dejar solamente números
+    valor = re.sub(r"[^0-9]", "", valor)
 
     return valor
 
+
+def comparar_nit(valor1, valor2):
+
+    nit1 = limpiar_nit(valor1)
+    nit2 = limpiar_nit(valor2)
+
+    if not nit1 or not nit2:
+        return False
+
+    return nit1 == nit2
+
+
+# ==========================================================
+# RAZÓN SOCIAL
+# ==========================================================
 
 def normalizar_razon_social(valor):
 
@@ -108,8 +137,40 @@ def normalizar_razon_social(valor):
 
     valor = limpiar_texto(valor)
 
+    if not valor:
+        return None
+
+    # Eliminar espacios para comparación adicional
+    valor = re.sub(r"\s+", " ", valor)
+
     return valor
 
+
+def comparar_razon_social(valor1, valor2):
+
+    razon1 = normalizar_razon_social(valor1)
+    razon2 = normalizar_razon_social(valor2)
+
+    if not razon1 or not razon2:
+        return False
+
+    # Coincidencia exacta
+    if razon1 == razon2:
+        return True
+
+    # Coincidencia parcial significativa
+    if razon1 in razon2:
+        return True
+
+    if razon2 in razon1:
+        return True
+
+    return False
+
+
+# ==========================================================
+# DIRECCIONES
+# ==========================================================
 
 def normalizar_direccion(valor):
 
@@ -118,53 +179,32 @@ def normalizar_direccion(valor):
 
     valor = limpiar_texto(valor)
 
+    if not valor:
+        return None
+
+    # Para direcciones eliminamos espacios completamente
+    # Ejemplo:
+    # CR 43 A 25 A 45
+    # CR43A25A45
+    valor = valor.replace(" ", "")
+
     return valor
-
-
-def comparar_razon_social(valor1, valor2):
-
-    valor1 = normalizar_razon_social(valor1)
-    valor2 = normalizar_razon_social(valor2)
-
-    if not valor1 or not valor2:
-        return False
-
-    # Coincidencia exacta
-    if valor1 == valor2:
-        return True
-
-    # Permite coincidencia cuando uno contiene al otro.
-    # Útil cuando un documento agrega un nombre comercial.
-    if valor1 in valor2:
-        return True
-
-    if valor2 in valor1:
-        return True
-
-    return False
 
 
 def comparar_direccion(valor1, valor2):
 
-    valor1 = normalizar_direccion(valor1)
-    valor2 = normalizar_direccion(valor2)
+    direccion1 = normalizar_direccion(valor1)
+    direccion2 = normalizar_direccion(valor2)
 
-    if not valor1 or not valor2:
+    if not direccion1 or not direccion2:
         return False
 
-    # Comparación exacta
-    if valor1 == valor2:
-        return True
+    return direccion1 == direccion2
 
-    # Comparación eliminando espacios
-    direccion1 = valor1.replace(" ", "")
-    direccion2 = valor2.replace(" ", "")
 
-    if direccion1 == direccion2:
-        return True
-
-    return False
-
+# ==========================================================
+# COMPARACIÓN GENERAL
+# ==========================================================
 
 def comparar_valores(nombre_validacion, valor1, valor2):
 
@@ -173,23 +213,23 @@ def comparar_valores(nombre_validacion, valor1, valor2):
 
     nombre = nombre_validacion.upper()
 
-    # Comparación especial para NIT
+    # NIT
     if "NIT" in nombre:
 
-        nit1 = limpiar_nit(valor1)
-        nit2 = limpiar_nit(valor2)
+        return comparar_nit(
+            valor1,
+            valor2
+        )
 
-        return nit1 == nit2
-
-    # Comparación especial para razón social
-    if "RAZON" in nombre or "RAZÓN" in nombre:
+    # Razón social
+    if "RAZON SOCIAL" in nombre or "RAZÓN SOCIAL" in nombre:
 
         return comparar_razon_social(
             valor1,
             valor2
         )
 
-    # Comparación especial para dirección
+    # Dirección
     if "DIRECCION" in nombre or "DIRECCIÓN" in nombre:
 
         return comparar_direccion(
@@ -197,12 +237,16 @@ def comparar_valores(nombre_validacion, valor1, valor2):
             valor2
         )
 
-    # Comparación general
+    # Comparación normal para otros campos
     valor1_normalizado = limpiar_texto(valor1)
     valor2_normalizado = limpiar_texto(valor2)
 
     return valor1_normalizado == valor2_normalizado
 
+
+# ==========================================================
+# EJECUTAR VALIDACIONES
+# ==========================================================
 
 def ejecutar_validaciones(documentos):
 
@@ -210,17 +254,20 @@ def ejecutar_validaciones(documentos):
 
     for regla in REGLAS:
 
+        tipo_doc1 = regla["documentos"][0]
+        tipo_doc2 = regla["documentos"][1]
+
         doc1 = buscar(
             documentos,
-            regla["documentos"][0]
+            tipo_doc1
         )
 
         doc2 = buscar(
             documentos,
-            regla["documentos"][1]
+            tipo_doc2
         )
 
-        # No existen los documentos necesarios
+        # Verificar que existan los documentos
         if not doc1 or not doc2:
 
             resultados.append({
@@ -234,6 +281,7 @@ def ejecutar_validaciones(documentos):
 
             continue
 
+        # Obtener valores
         valor1 = doc1.datos.get(
             regla["campo_doc1"]
         )
@@ -242,7 +290,7 @@ def ejecutar_validaciones(documentos):
             regla["campo_doc2"]
         )
 
-        # No se pudo extraer alguno de los datos
+        # Verificar información disponible
         if valor1 is None or valor2 is None:
 
             estado = "SIN INFORMACIÓN"
@@ -257,6 +305,7 @@ def ejecutar_validaciones(documentos):
 
             if coinciden:
                 estado = "OK"
+
             else:
                 estado = "ERROR"
 

@@ -36,9 +36,11 @@ if uploaded_files:
 
     carpeta.mkdir(exist_ok=True)
 
-    # limpiar carpeta temporal
+   
+    # Limpiar carpeta temporal
     for archivo in carpeta.glob("*"):
-        archivo.unlink()
+        if archivo.is_file():
+            archivo.unlink(missing_ok=True)
 
     # guardar archivos cargados
     for archivo in uploaded_files:

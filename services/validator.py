@@ -7,7 +7,6 @@ from services.rules import REGLAS
 def buscar(documentos, tipo):
 
     for documento in documentos:
-
         if documento.tipo == tipo:
             return documento
 
@@ -16,37 +15,103 @@ def buscar(documentos, tipo):
 
 def quitar_tildes(texto):
 
-    texto = unicodedata.normalize(
-        "NFD",
-        str(texto)
-    )
+    if texto is None:
+        return None
 
-    texto = "".join(
+    texto = unicodedata.normalize("NFD", str(texto))
+
+    return "".join(
         caracter
         for caracter in texto
         if unicodedata.category(caracter) != "Mn"
     )
 
-    return texto
 
-
-def limpiar_general(valor):
+def limpiar_nit(valor):
 
     if valor is None:
         return None
 
-    valor = str(valor).strip()
+    numeros = re.sub(
+        r"[^0-9]",
+        "",
+        str(valor)
+    )
 
-    if not valor:
+    return numeros if numeros else None
+
+
+def limpiar_razon_social(valor):
+
+    if valor is None:
         return None
 
-    valor = quitar_tildes(valor)
+    valor = quitar_tildes(valor).upper()
 
-    valor = valor.upper()
+    # Eliminar expresiones que pueden variar entre documentos
+    valor = valor.replace(
+        "SOCIEDAD POR ACCIONES SIMPLIFICADA",
+        ""
+    )
 
-    valor = valor.replace("N°", "")
-    valor = valor.replace("NO.", "")
-    valor = valor.replace("NUMERO", "")
+    valor = re.sub(
+        r"S\.?\s*A\.?\s*S\.?",
+        "",
+        valor
+    )
+
+    # Eliminar puntuación
+    valor = re.sub(
+        r"[^A-Z0-9 ]",
+        " ",
+        valor
+    )
+
+    valor = re.sub(
+        r"\s+",
+        " ",
+        valor
+    ).strip()
+
+    return valor
+
+
+def limpiar_direccion(valor):
+
+    if valor is None:
+        return None
+
+    valor = quitar_tildes(valor).upper().strip()
+
+    # Eliminar ubicación adicional
+    for texto in [
+        "MEDELLIN",
+        "COLOMBIA",
+        "ANTIOQUIA"
+    ]:
+        valor = valor.replace(texto, "")
+
+    # Normalizar tipos de vía
+    reemplazos = [
+        ("CARRERA", "CR"),
+        ("CRA.", "CR"),
+        ("CRA", "CR"),
+        ("CALLE", "CL"),
+        ("CLL.", "CL"),
+        ("CLL", "CL"),
+        ("AVENIDA", "AV"),
+        ("AV.", "AV"),
+        ("DIAGONAL", "DG"),
+        ("TRANSVERSAL", "TV")
+    ]
+
+    for original, nuevo in reemplazos:
+        valor = valor.replace(original, nuevo)
+
+    # Eliminar número, signos y puntuación
+    valor = valor.replace("N°", " ")
+    valor = valor.replace("NO.", " ")
+    valor = valor.replace("#", " ")
 
     valor = re.sub(
         r"[^A-Z0-9]",
@@ -57,223 +122,61 @@ def limpiar_general(valor):
     return valor
 
 
-def limpiar_nit(valor):
-
-    if valor is None:
-        return None
-
-    valor = str(valor).strip()
-
-    if not valor:
-        return None
-
-    # Conservamos únicamente números
-    numeros = re.sub(
-        r"[^0-9]",
-        "",
-        valor
-    )
-
-    # Si tiene 10 dígitos, normalmente
-    # el último puede ser el dígito de verificación.
-    # Para comparar documentos se conserva el número completo.
-    return numeros
-
-
-def limpiar_direccion(valor):
-
-    if valor is None:
-        return None
-
-    valor = quitar_tildes(valor).upper()
-
-    # Normalización de palabras
-    reemplazos = {
-
-        "CARRERA": "CR",
-        "CRA": "CR",
-        "CRA.": "CR",
-
-        "CALLE": "CL",
-        "CLL": "CL",
-        "CL.": "CL",
-
-        "AVENIDA": "AV",
-        "AVENIDA ": "AV",
-
-        "DIAGONAL": "DG",
-        "TRANSVERSAL": "TV"
-    }
-
-    for original, nuevo in reemplazos.items():
-
-        valor = valor.replace(
-            original,
-            nuevo
-        )
-
-    # Eliminar ciudad y país
-    lugares = [
-        "MEDELLIN",
-        "MEDELLIN COLOMBIA",
-        "COLOMBIA",
-        "ANTIOQUIA"
-    ]
-
-    for lugar in lugares:
-
-        valor = valor.replace(
-            lugar,
-            ""
-        )
-
-    # Eliminar símbolos
-    valor = valor.replace("N°", "")
-    valor = valor.replace("NO.", "")
-    valor = valor.replace("#", "")
-
-    # Separar letras y números cuando vienen juntos
-    valor = re.sub(
-        r"([0-9])([A-Z])",
-        r"\1 \2",
-        valor
-    )
-
-    valor = re.sub(
-        r"([A-Z])([0-9])",
-        r"\1 \2",
-        valor
-    )
-
-    # Eliminar puntuación
-    valor = re.sub(
-        r"[^A-Z0-9]",
-        " ",
-        valor
-    )
-
-    # Eliminar espacios repetidos
-    valor = re.sub(
-        r"\s+",
-        " ",
-        valor
-    )
-
-    return valor.strip()
-
-
-def limpiar_razon_social(valor):
-
-    if valor is None:
-        return None
-
-    valor = quitar_tildes(valor).upper()
-
-    # Eliminar puntuación
-    valor = re.sub(
-        r"[^A-Z0-9 ]",
-        " ",
-        valor
-    )
-
-    # Palabras societarias que pueden aparecer
-    # con distintas puntuaciones
-    valor = valor.replace(
-        "SOCIEDAD POR ACCIONES SIMPLIFICADA",
-        "SAS"
-    )
-
-    valor = valor.replace(
-        "S A S",
-        "SAS"
-    )
-
-    valor = valor.replace(
-        "SAS",
-        ""
-    )
-
-    # Espacios múltiples
-    valor = re.sub(
-        r"\s+",
-        " ",
-        valor
-    )
-
-    return valor.strip()
-
-
 def limpiar_numero(valor):
 
     if valor is None:
         return None
 
-    valor = str(valor).strip()
+    valor = str(valor).strip().upper()
 
     if not valor:
         return None
 
-    valor = valor.upper()
+    # Eliminar símbolos monetarios y unidades
+    for texto in [
+        "USD",
+        "US$",
+        "COP",
+        "$",
+        "KG",
+        "KGS",
+        "KILOGRAMOS",
+        "LB"
+    ]:
+        valor = valor.replace(texto, "")
 
-    # Eliminar monedas
-    valor = valor.replace("USD", "")
-    valor = valor.replace("US$", "")
-    valor = valor.replace("COP", "")
-    valor = valor.replace("$", "")
+    valor = valor.strip()
 
     # Eliminar espacios
     valor = valor.replace(" ", "")
 
-    # Caso: 3,284.97
+    # Formato: 28,350.00
     if "," in valor and "." in valor:
 
         ultima_coma = valor.rfind(",")
         ultimo_punto = valor.rfind(".")
 
         if ultimo_punto > ultima_coma:
-
             valor = valor.replace(",", "")
-
         else:
-
             valor = valor.replace(".", "")
             valor = valor.replace(",", ".")
 
+    # Formato con coma decimal
     elif "," in valor:
 
         partes = valor.split(",")
 
-        # 3284,97
         if len(partes[-1]) == 2:
-
             valor = valor.replace(",", ".")
-
-        # 3,284
         else:
-
             valor = valor.replace(",", "")
 
     try:
-
-        return round(
-            float(valor),
-            2
-        )
+        return round(float(valor), 2)
 
     except ValueError:
-
         return None
-
-
-def comparar_texto(valor1, valor2):
-
-    if valor1 is None or valor2 is None:
-        return False
-
-    texto1 = limpiar_general(valor1)
-    texto2 = limpiar_general(valor2)
-
-    return texto1 == texto2
 
 
 def comparar_nit(valor1, valor2):
@@ -284,20 +187,16 @@ def comparar_nit(valor1, valor2):
     if not nit1 or not nit2:
         return False
 
-    # Comparación directa
+    # Exactamente iguales
     if nit1 == nit2:
         return True
 
-    # Si uno tiene dígito de verificación y otro no
+    # Un documento puede incluir el dígito de verificación
     if len(nit1) == len(nit2) + 1:
-
-        if nit1[:-1] == nit2:
-            return True
+        return nit1[:-1] == nit2
 
     if len(nit2) == len(nit1) + 1:
-
-        if nit2[:-1] == nit1:
-            return True
+        return nit2[:-1] == nit1
 
     return False
 
@@ -313,35 +212,13 @@ def comparar_razon_social(valor1, valor2):
     if razon1 == razon2:
         return True
 
-    # Comparación por inclusión.
-    # Útil cuando un documento agrega una
-    # denominación comercial.
     if razon1 in razon2:
         return True
 
     if razon2 in razon1:
         return True
 
-    palabras1 = set(razon1.split())
-    palabras2 = set(razon2.split())
-
-    if not palabras1 or not palabras2:
-        return False
-
-    coincidencias = len(
-        palabras1.intersection(palabras2)
-    )
-
-    total = max(
-        len(palabras1),
-        len(palabras2)
-    )
-
-    porcentaje = coincidencias / total
-
-    # Se considera coincidencia si al menos
-    # el 70% de los términos coincide.
-    return porcentaje >= 0.70
+    return False
 
 
 def comparar_direccion(valor1, valor2):
@@ -352,17 +229,7 @@ def comparar_direccion(valor1, valor2):
     if not direccion1 or not direccion2:
         return False
 
-    if direccion1 == direccion2:
-        return True
-
-    # Comparación eliminando espacios
-    sin_espacios1 = direccion1.replace(" ", "")
-    sin_espacios2 = direccion2.replace(" ", "")
-
-    if sin_espacios1 == sin_espacios2:
-        return True
-
-    return False
+    return direccion1 == direccion2
 
 
 def comparar_numero(valor1, valor2):
@@ -373,57 +240,7 @@ def comparar_numero(valor1, valor2):
     if numero1 is None or numero2 is None:
         return False
 
-    # Tolerancia mínima por posibles decimales
     return abs(numero1 - numero2) < 0.01
-
-
-def comparar_según_validacion(
-    nombre,
-    valor1,
-    valor2
-):
-
-    nombre = nombre.upper()
-
-    if "NIT" in nombre:
-
-        return comparar_nit(
-            valor1,
-            valor2
-        )
-
-    if (
-        "RAZ" in nombre
-        or "SOCIAL" in nombre
-    ):
-
-        return comparar_razon_social(
-            valor1,
-            valor2
-        )
-
-    if "DIRECCI" in nombre:
-
-        return comparar_direccion(
-            valor1,
-            valor2
-        )
-
-    if (
-        "VALOR" in nombre
-        or "PESO" in nombre
-        or "FACTURA" in nombre
-    ):
-
-        return comparar_numero(
-            valor1,
-            valor2
-        )
-
-    return comparar_texto(
-        valor1,
-        valor2
-    )
 
 
 def ejecutar_validaciones(documentos):
@@ -467,19 +284,52 @@ def ejecutar_validaciones(documentos):
 
         else:
 
-            coincide = comparar_según_validacion(
-                regla["nombre"],
-                valor1,
-                valor2
-            )
+            nombre = regla["nombre"].upper()
 
-            if coincide:
+            if "NIT" in nombre:
 
-                estado = "OK"
+                coincide = comparar_nit(
+                    valor1,
+                    valor2
+                )
+
+            elif (
+                "RAZON" in nombre
+                or "RAZÓN" in nombre
+                or "SOCIAL" in nombre
+            ):
+
+                coincide = comparar_razon_social(
+                    valor1,
+                    valor2
+                )
+
+            elif "DIRECCION" in nombre or "DIRECCIÓN" in nombre:
+
+                coincide = comparar_direccion(
+                    valor1,
+                    valor2
+                )
+
+            elif (
+                "VALOR" in nombre
+                or "PESO" in nombre
+            ):
+
+                coincide = comparar_numero(
+                    valor1,
+                    valor2
+                )
 
             else:
 
-                estado = "ERROR"
+                coincide = (
+                    str(valor1).strip().upper()
+                    ==
+                    str(valor2).strip().upper()
+                )
+
+            estado = "OK" if coincide else "ERROR"
 
         resultados.append({
 

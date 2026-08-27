@@ -6,15 +6,18 @@ from dotenv import load_dotenv
 from google import genai
 
 
-load_dotenv()
+# =========================================================
+# CONFIGURACIÓN
+# =========================================================
 
+load_dotenv()
 
 API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not API_KEY:
     raise ValueError(
         "ERROR: No se encontró GEMINI_API_KEY. "
-        "Verifica GEMINI_API_KEY en los Secrets de Streamlit."
+        "Verifica la configuración de Secrets de Streamlit."
     )
 
 
@@ -29,27 +32,39 @@ MODEL = os.getenv(
 )
 
 
+# =========================================================
+# PROMPTS
+# =========================================================
+
 PROMPTS = {
 
-    "RUT": """
-Eres un analista documental experto de la DIAN en Colombia.
+    # =====================================================
+    # RUT
+    # =====================================================
 
-Analiza exclusivamente el contenido del Registro Único Tributario proporcionado.
+    "RUT": """
+Eres un analista documental experto en documentos tributarios colombianos.
+
+Analiza exclusivamente el contenido del siguiente Registro Único Tributario (RUT).
 
 Extrae únicamente la información solicitada.
 
-REGLAS IMPORTANTES:
+IMPORTANTE:
 
 - No inventes información.
-- Copia los datos tal como aparecen en el documento.
-- El NIT debe corresponder al número de identificación tributaria.
-- No confundas el número del formulario con el NIT.
-- No agregues información que no aparezca en el documento.
-- Si un dato no aparece, responde null.
+- No modifiques los números del NIT.
+- Si el NIT tiene dígito de verificación separado por guion, consérvalo.
+- No confundas el NIT con otros números del documento.
+- La razón social debe corresponder al nombre oficial registrado.
+- La dirección debe corresponder a la dirección registrada en el RUT.
+- Si un dato no aparece claramente, responde null.
+- Responde exclusivamente JSON válido.
+- No agregues explicaciones.
+- No uses bloques de código Markdown.
 
-Responde exclusivamente JSON válido:
+Estructura obligatoria:
 
-{
+{{
   "tipo_documento": "RUT",
   "nit": null,
   "razon_social": null,
@@ -58,7 +73,7 @@ Responde exclusivamente JSON válido:
   "departamento": null,
   "estado": null,
   "responsabilidades": null
-}
+}}
 
 Contenido del documento:
 
@@ -66,30 +81,36 @@ Contenido del documento:
 """,
 
 
+    # =====================================================
+    # DUTA
+    # =====================================================
+
     "DUTA": """
 Eres un analista documental experto en operaciones aduaneras y Zona Franca en Colombia.
 
-Analiza exclusivamente el Documento Único de Tránsito Aduanero proporcionado.
+Analiza exclusivamente el siguiente Documento Único de Tránsito Aduanero (DUTA).
 
-Extrae solamente los datos solicitados.
+Extrae únicamente los datos solicitados.
 
-REGLAS IMPORTANTES:
+IMPORTANTE:
 
-- "numero_documento" corresponde al número del DUTA.
-- "destinatario" corresponde al consignatario o destinatario final de la mercancía.
-- "usuario_zona_franca" corresponde exclusivamente al Usuario Industrial, Usuario Comercial, Usuario Operador o Usuario de Zona Franca identificado en el documento.
-- "incoterm" debe ser únicamente el código Incoterm, por ejemplo: FOB, CIF, EXW, DDP.
-- "moneda" debe ser la moneda del valor de la factura.
-- "valor_factura" debe ser exclusivamente el valor total de la factura comercial asociada a la mercancía.
-- NO confundas valor factura con fletes, seguros, tributos, valor FOB u otros valores.
-- "peso_bruto" debe corresponder únicamente al peso bruto total.
-- "peso_neto" debe corresponder únicamente al peso neto total.
 - No inventes información.
+- "destinatario" corresponde al consignatario o destinatario final de la mercancía.
+- "usuario_zona_franca" corresponde al Usuario Industrial o Usuario de Zona Franca mencionado en el documento.
+- "valor_factura" debe corresponder al VALOR TOTAL DE LA FACTURA o valor comercial total relacionado con la operación.
+- No extraigas el valor de una sola mercancía, línea o ítem cuando exista un valor total.
+- "peso_bruto" debe corresponder al peso bruto total.
+- "peso_neto" debe corresponder al peso neto total.
+- Conserva los valores numéricos tal como aparecen en el documento.
+- Si existen varios pesos, selecciona únicamente el que esté claramente identificado como peso bruto o peso neto.
 - Si un dato no aparece claramente, responde null.
+- Responde exclusivamente JSON válido.
+- No agregues explicaciones.
+- No uses bloques de código Markdown.
 
-Responde exclusivamente JSON válido:
+Estructura obligatoria:
 
-{
+{{
   "tipo_documento": "DUTA",
   "numero_documento": null,
   "destinatario": null,
@@ -99,7 +120,7 @@ Responde exclusivamente JSON válido:
   "valor_factura": null,
   "peso_bruto": null,
   "peso_neto": null
-}
+}}
 
 Contenido del documento:
 
@@ -107,45 +128,40 @@ Contenido del documento:
 """,
 
 
+    # =====================================================
+    # FACTURA COMERCIAL
+    # =====================================================
+
     "FACTURA COMERCIAL": """
 Eres un analista documental experto en comercio exterior.
 
-Analiza exclusivamente la factura comercial proporcionada.
+Analiza exclusivamente la siguiente Factura Comercial.
 
 Extrae únicamente los datos solicitados.
 
-REGLAS IMPORTANTES:
+IMPORTANTE:
 
-- "numero_factura" corresponde al número de la Commercial Invoice.
-- "vendedor" corresponde al Seller, Exporter o proveedor.
-- "comprador" corresponde al Buyer, Importer o cliente.
-- "nit" corresponde únicamente al NIT o identificación tributaria del comprador cuando aparezca.
-- "razon_social" corresponde al nombre o razón social del comprador.
-- "direccion" corresponde a la dirección del comprador.
-- "incoterm" debe ser únicamente el código del Incoterm.
-- "moneda" debe corresponder a la moneda de la factura.
-- "valor_factura" debe ser exclusivamente el TOTAL FINAL DE LA FACTURA.
-- Para "valor_factura", busca expresiones como:
-  TOTAL INVOICE VALUE,
-  INVOICE TOTAL,
-  TOTAL AMOUNT,
-  GRAND TOTAL,
-  TOTAL.
-- NO uses como valor_factura:
-  precio unitario,
-  subtotal de una línea,
-  precio de un producto,
-  valor de flete,
-  valor de seguro,
-  impuestos,
-  descuentos.
-- "descripcion_mercancia" debe ser una descripción general de la mercancía.
 - No inventes información.
+- "vendedor" corresponde al SELLER, EXPORTER, SUPPLIER o vendedor.
+- "comprador" corresponde al BUYER, IMPORTER o comprador.
+- "nit" corresponde al NIT del comprador o importador cuando aparezca.
+- "razon_social" corresponde a la razón social completa del comprador.
+- "direccion" corresponde a la dirección del comprador.
+- "incoterm" corresponde al Incoterm expresamente indicado.
+- "moneda" corresponde a la moneda de la factura.
+- "valor_factura" debe ser el VALOR TOTAL DE LA FACTURA.
+- No confundas el valor total con precios unitarios.
+- No confundas el valor total con el valor de una línea individual.
+- Si aparecen varios valores, selecciona únicamente el identificado como TOTAL INVOICE VALUE, INVOICE TOTAL, GRAND TOTAL, TOTAL AMOUNT o equivalente.
+- "descripcion_mercancia" debe ser una descripción general de la mercancía.
 - Si un dato no aparece claramente, responde null.
+- Responde exclusivamente JSON válido.
+- No agregues explicaciones.
+- No uses bloques de código Markdown.
 
-Responde exclusivamente JSON válido:
+Estructura obligatoria:
 
-{
+{{
   "tipo_documento": "FACTURA COMERCIAL",
   "numero_factura": null,
   "vendedor": null,
@@ -157,7 +173,7 @@ Responde exclusivamente JSON válido:
   "moneda": null,
   "valor_factura": null,
   "descripcion_mercancia": null
-}
+}}
 
 Contenido del documento:
 
@@ -165,29 +181,36 @@ Contenido del documento:
 """,
 
 
+    # =====================================================
+    # BL
+    # =====================================================
+
     "BL": """
-Eres un analista documental experto en transporte internacional.
+Eres un analista documental experto en transporte internacional y documentos de embarque.
 
-Analiza exclusivamente el Bill of Lading proporcionado.
+Analiza exclusivamente el siguiente Bill of Lading (BL).
 
-Extrae solamente los datos solicitados.
+Extrae únicamente los datos solicitados.
 
-REGLAS IMPORTANTES:
+IMPORTANTE:
 
-- "numero_bl" corresponde al número del Bill of Lading.
-- "shipper" corresponde al remitente.
-- "consignee" corresponde al destinatario.
-- "notify_party" corresponde al Notify Party.
-- "usuario_zona_franca" debe extraerse únicamente si aparece claramente identificado.
-- "peso_bruto" corresponde al peso bruto total de la mercancía.
-- "peso_neto" corresponde al peso neto total solamente si aparece claramente.
-- No confundas pesos por bulto con el peso total.
 - No inventes información.
-- Si no aparece claramente, responde null.
+- "shipper" corresponde al remitente o exportador.
+- "consignee" corresponde al consignatario o destinatario.
+- "notify_party" corresponde a la parte que debe ser notificada.
+- "usuario_zona_franca" debe extraerse únicamente cuando esté claramente identificado.
+- "peso_bruto" debe corresponder al peso bruto total.
+- "peso_neto" debe corresponder al peso neto total.
+- No confundas cantidad de bultos con peso.
+- Si existen varios pesos, utiliza únicamente los valores claramente identificados como peso bruto o neto.
+- Si un dato no aparece claramente, responde null.
+- Responde exclusivamente JSON válido.
+- No agregues explicaciones.
+- No uses bloques de código Markdown.
 
-Responde exclusivamente JSON válido:
+Estructura obligatoria:
 
-{
+{{
   "tipo_documento": "BL",
   "numero_bl": null,
   "shipper": null,
@@ -198,7 +221,7 @@ Responde exclusivamente JSON válido:
   "puerto_destino": null,
   "peso_bruto": null,
   "peso_neto": null
-}
+}}
 
 Contenido del documento:
 
@@ -206,53 +229,75 @@ Contenido del documento:
 """,
 
 
+    # =====================================================
+    # PACKING LIST
+    # =====================================================
+
     "PACKING LIST": """
-Eres un analista documental experto en comercio exterior.
+Eres un analista documental experto en documentos de comercio exterior.
 
-Analiza exclusivamente el Packing List proporcionado.
+Analiza exclusivamente el siguiente Packing List o Lista de Empaque.
 
-REGLAS IMPORTANTES:
+Extrae únicamente los datos solicitados.
 
-- "numero_documento" corresponde al número del Packing List.
-- "peso_bruto" corresponde al peso bruto TOTAL.
-- "peso_neto" corresponde al peso neto TOTAL.
-- "cantidad_bultos" corresponde al número total de paquetes, cajas, pallets o bultos.
-- No uses valores parciales de una línea cuando exista un total.
+IMPORTANTE:
+
 - No inventes información.
+- "peso_bruto" debe ser el peso bruto TOTAL del envío.
+- "peso_neto" debe ser el peso neto TOTAL del envío.
+- No confundas pesos individuales de productos con el peso total.
+- "cantidad_bultos" corresponde al total de paquetes, cajas, pallets, bultos o unidades de embalaje.
 - Si un dato no aparece claramente, responde null.
+- Responde exclusivamente JSON válido.
+- No agregues explicaciones.
+- No uses bloques de código Markdown.
 
-Responde exclusivamente JSON válido:
+Estructura obligatoria:
 
-{
+{{
   "tipo_documento": "PACKING LIST",
   "numero_documento": null,
   "peso_bruto": null,
   "peso_neto": null,
   "cantidad_bultos": null
-}
+}}
 
 Contenido del documento:
 
 {texto}
 """,
 
+
+    # =====================================================
+    # CERTIFICADO DE FLETES
+    # =====================================================
 
     "CERTIFICADO DE FLETES": """
-Eres un analista documental experto en transporte y comercio exterior.
+Eres un analista documental experto en transporte internacional y comercio exterior.
 
-Analiza el documento proporcionado y extrae únicamente la información que aparezca claramente.
+Analiza exclusivamente el siguiente documento de transporte o certificado de fletes.
 
-Responde exclusivamente JSON válido:
+Determina la información disponible.
 
-{
+IMPORTANTE:
+
+- No inventes información.
+- Extrae únicamente información que aparezca claramente en el documento.
+- Si un dato no aparece, responde null.
+- Responde exclusivamente JSON válido.
+- No agregues explicaciones.
+
+Estructura obligatoria:
+
+{{
   "tipo_documento": "CERTIFICADO DE FLETES",
   "numero_documento": null,
-  "empresa_transportadora": null,
+  "transportador": null,
+  "remitente": null,
+  "destinatario": null,
   "valor_flete": null,
   "moneda": null
-}
-
-No inventes información.
+}}
 
 Contenido del documento:
 
@@ -260,10 +305,16 @@ Contenido del documento:
 """,
 
 
-    "DOCUMENTO DESCONOCIDO": """
-Analiza el documento proporcionado.
+    # =====================================================
+    # DOCUMENTO DESCONOCIDO
+    # =====================================================
 
-Determina si corresponde a alguno de los siguientes tipos:
+    "DOCUMENTO DESCONOCIDO": """
+Eres un experto en clasificación de documentos de comercio exterior y documentos colombianos.
+
+Analiza el siguiente documento.
+
+Determina si corresponde a alguno de estos tipos:
 
 - RUT
 - DUTA
@@ -272,11 +323,18 @@ Determina si corresponde a alguno de los siguientes tipos:
 - PACKING LIST
 - CERTIFICADO DE FLETES
 
-Responde exclusivamente JSON válido:
+IMPORTANTE:
 
-{
-  "tipo_documento": "TIPO IDENTIFICADO O DESCONOCIDO"
-}
+- No inventes información.
+- Si no puedes identificar claramente el documento, utiliza "DOCUMENTO DESCONOCIDO".
+- Responde exclusivamente JSON válido.
+- No agregues explicaciones.
+
+Estructura obligatoria:
+
+{{
+  "tipo_documento": "DOCUMENTO DESCONOCIDO"
+}}
 
 Contenido del documento:
 
@@ -285,38 +343,51 @@ Contenido del documento:
 }
 
 
+# =========================================================
+# LIMPIAR RESPUESTA DE GEMINI
+# =========================================================
+
 def limpiar_respuesta(respuesta):
 
     texto_json = respuesta.text.strip()
 
+    # Eliminar posibles bloques Markdown
     texto_json = texto_json.replace("```json", "")
+    texto_json = texto_json.replace("```JSON", "")
     texto_json = texto_json.replace("```", "")
     texto_json = texto_json.strip()
 
-    # Buscar el bloque JSON si Gemini agrega texto adicional
-    coincidencia = re.search(
-        r"\{.*\}",
-        texto_json,
-        re.DOTALL
-    )
+    # Intentar localizar el JSON
+    inicio = texto_json.find("{")
+    fin = texto_json.rfind("}")
 
-    if coincidencia:
-        texto_json = coincidencia.group()
+    if inicio != -1 and fin != -1:
+
+        texto_json = texto_json[inicio:fin + 1]
 
     return json.loads(texto_json)
 
 
+# =========================================================
+# EXTRAER DATOS DESDE TEXTO
+# =========================================================
+
 def extraer_datos(tipo_documento, texto):
 
+    # Obtener el prompt correspondiente
     plantilla = PROMPTS.get(
         tipo_documento,
         PROMPTS["DOCUMENTO DESCONOCIDO"]
     )
 
-    # Usamos replace para evitar errores con las llaves {}
-    prompt = plantilla.replace(
-        "{texto}",
-        texto
+    # Limitar texto excesivamente grande
+    # Se mantiene suficiente contenido para analizar documentos largos
+    if texto and len(texto) > 30000:
+        texto = texto[:30000]
+
+    # Insertar el contenido del documento
+    prompt = plantilla.format(
+        texto=texto or ""
     )
 
     try:
@@ -328,28 +399,56 @@ def extraer_datos(tipo_documento, texto):
 
         datos = limpiar_respuesta(respuesta)
 
+        # Verificar que Gemini haya devuelto un diccionario
+        if not isinstance(datos, dict):
+
+            return {
+                "error": "Gemini devolvió una estructura diferente a un JSON objeto.",
+                "respuesta_original": respuesta.text
+            }
+
+        # Asegurar que siempre exista tipo_documento
+        if "tipo_documento" not in datos:
+            datos["tipo_documento"] = tipo_documento
+
         return datos
 
     except json.JSONDecodeError:
 
         return {
             "error": "Gemini no devolvió un JSON válido.",
-            "respuesta_original": respuesta.text
-            if "respuesta" in locals()
-            else None
+            "respuesta_original": (
+                respuesta.text
+                if "respuesta" in locals()
+                else None
+            )
         }
 
     except Exception as e:
 
         return {
-            "error": f"Error extrayendo datos: {str(e)}"
+            "error": f"Error al extraer datos con Gemini: {str(e)}"
         }
 
+
+# =========================================================
+# ANALIZAR PDF DIRECTAMENTE CON GEMINI
+# =========================================================
 
 def analizar_pdf_con_gemini(
     ruta_pdf,
     tipo_documento="DOCUMENTO DESCONOCIDO"
 ):
+
+    """
+    Envía directamente el archivo PDF a Gemini.
+
+    Este método es especialmente útil cuando:
+
+    - El PDF está escaneado.
+    - PyMuPDF no puede extraer texto.
+    - El texto extraído es demasiado corto.
+    """
 
     archivo_gemini = None
 
@@ -357,6 +456,7 @@ def analizar_pdf_con_gemini(
 
         print("Enviando PDF directamente a Gemini...")
 
+        # Subir archivo a Gemini
         archivo_gemini = client.files.upload(
             file=ruta_pdf
         )
@@ -366,10 +466,10 @@ def analizar_pdf_con_gemini(
             PROMPTS["DOCUMENTO DESCONOCIDO"]
         )
 
-        # Para PDF directo eliminamos el marcador de texto
-        prompt = plantilla.replace(
-            "{texto}",
-            "Analiza directamente el archivo PDF adjunto."
+        # Para análisis directo del PDF no necesitamos insertar
+        # texto extraído. Reemplazamos el marcador.
+        prompt = plantilla.format(
+            texto="Analiza directamente el contenido visual y textual del PDF adjunto."
         )
 
         respuesta = client.models.generate_content(
@@ -380,7 +480,30 @@ def analizar_pdf_con_gemini(
             ]
         )
 
-        return limpiar_respuesta(respuesta)
+        datos = limpiar_respuesta(respuesta)
+
+        if not isinstance(datos, dict):
+
+            return {
+                "error": "Gemini no devolvió un JSON objeto válido.",
+                "respuesta_original": respuesta.text
+            }
+
+        if "tipo_documento" not in datos:
+            datos["tipo_documento"] = tipo_documento
+
+        return datos
+
+    except json.JSONDecodeError:
+
+        return {
+            "error": "Gemini no devolvió un JSON válido.",
+            "respuesta_original": (
+                respuesta.text
+                if "respuesta" in locals()
+                else None
+            )
+        }
 
     except Exception as e:
 
@@ -390,6 +513,7 @@ def analizar_pdf_con_gemini(
 
     finally:
 
+        # Eliminar archivo temporal de Gemini
         if archivo_gemini:
 
             try:
@@ -401,3 +525,24 @@ def analizar_pdf_con_gemini(
             except Exception:
 
                 pass
+
+
+# =========================================================
+# FUNCIÓN AUXILIAR PARA DETECTAR
+# SI EL TEXTO EXTRAÍDO ES INSUFICIENTE
+# =========================================================
+
+def texto_insuficiente(texto):
+
+    if texto is None:
+        return True
+
+    texto_limpio = re.sub(
+        r"\s+",
+        "",
+        texto
+    )
+
+    # Si PyMuPDF extrajo menos de 50 caracteres útiles,
+    # probablemente sea un PDF escaneado.
+    return len(texto_limpio) < 50

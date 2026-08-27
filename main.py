@@ -1,24 +1,45 @@
-from dotenv import load_dotenv
 import os
+from dotenv import load_dotenv
 from pathlib import Path
 
-# Cargar variables de entorno
+
 load_dotenv()
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-# Importar servicios
+GEMINI_API_KEY = os.getenv(
+    "GEMINI_API_KEY"
+)
+
+SUPABASE_URL = os.getenv(
+    "SUPABASE_URL"
+)
+
+SUPABASE_KEY = os.getenv(
+    "SUPABASE_KEY"
+)
+
+
 from services.pdf_reader import leer_pdf
-from services.document_classifier import clasificar_documento
+
+from services.document_classifier import (
+    clasificar_documento
+)
+
 from services.data_extractor import (
     extraer_datos,
     analizar_pdf_con_gemini
 )
+
 from services.models import Documento
-from services.normalizer import normalizar
-from services.validator import ejecutar_validaciones
+
+from services.normalizer import (
+    normalizar
+)
+
+from services.validator import (
+    ejecutar_validaciones
+)
+
 from services.supabase_service import (
     guardar_documento,
     guardar_validaciones
@@ -31,75 +52,80 @@ def procesar_expediente(carpeta="documentos_prueba"):
 
     documentos = []
 
-    # Recorrer todos los PDF de la carpeta
     for archivo in carpeta.glob("*.pdf"):
 
-        print("=" * 60)
-        print("Procesando:", archivo.name)
+        print("\n" + "=" * 80)
 
-        # Leer el texto del PDF
-        texto = leer_pdf(str(archivo))
+        print(
+            "Procesando:",
+            archivo.name
+        )
 
-        print("\nPrimeros 600 caracteres:")
-        print(texto[:600])
-        print("-" * 80)
+        # ==============================
+        # LEER TEXTO DEL PDF
+        # ==============================
 
-        # Clasificar inicialmente usando el texto extraído
-        tipo = clasificar_documento(texto)
+        texto = leer_pdf(
+            str(archivo)
+        )
 
-        print(f"Tipo detectado por texto: {tipo}")
+        print(
+            "\nCantidad de caracteres extraídos:",
+            len(texto)
+        )
 
-        # ==================================================
-        # CASO 1:
-        # El PDF tiene poco texto o no pudo ser identificado.
-        # Se envía directamente el PDF a Gemini.
-        # ==================================================
+        print(
+            "\nPrimeros 600 caracteres:"
+        )
 
-        if tipo == "DOCUMENTO DESCONOCIDO" or len(texto.strip()) < 100:
+        print(
+            texto[:600]
+        )
+
+        print(
+            "-" * 80
+        )
+
+
+        # ==============================
+        # CLASIFICAR DOCUMENTO
+        # ==============================
+
+        tipo = clasificar_documento(
+            texto
+        )
+
+        print(
+            f"Tipo detectado: {tipo}"
+        )
+
+
+        # ==============================
+        # EXTRAER DATOS
+        # ==============================
+
+        # Si el PDF tiene poco texto,
+        # probablemente sea escaneado
+
+        if len(texto.strip()) < 200:
 
             print(
-                "\nPDF sin texto suficiente o no identificado."
+                "\nPDF con poco texto."
             )
 
             print(
-                "Analizando directamente el PDF con Gemini..."
+                "Analizando PDF directamente con Gemini..."
             )
 
-            # Primero Gemini intenta identificar el documento
-            resultado_identificacion = analizar_pdf_con_gemini(
-                str(archivo),
-                "DOCUMENTO DESCONOCIDO"
-            )
-
-            print("\nResultado de identificación:")
-            print(resultado_identificacion)
-
-            # Obtener el tipo identificado
-            tipo = resultado_identificacion.get(
-                "tipo_documento",
-                "DOCUMENTO DESCONOCIDO"
-            )
-
-            print(
-                f"\nTipo detectado por Gemini: {tipo}"
-            )
-
-            # Ahora Gemini analiza nuevamente el PDF
-            # usando el prompt específico del tipo identificado
             datos = analizar_pdf_con_gemini(
                 str(archivo),
                 tipo
             )
 
-        # ==================================================
-        # CASO 2:
-        # El PDF tiene texto y fue identificado por las reglas.
-        # ==================================================
-
         else:
 
             print(
-                "\nExtrayendo datos a partir del texto con Gemini..."
+                "\nAnalizando texto con Gemini..."
             )
 
             datos = extraer_datos(
@@ -107,36 +133,96 @@ def procesar_expediente(carpeta="documentos_prueba"):
                 texto
             )
 
-        # Mostrar datos extraídos
-        print("\nDatos extraídos por Gemini:")
-        print(datos)
 
-        # Normalizar los datos
-        datos = normalizar(datos)
-
-        print("\nDatos normalizados:")
-        print(datos)
-
-        # Crear objeto Documento
-        documento = Documento(
-            tipo=tipo,
-            archivo=archivo.name,
-            datos=datos
+        print(
+            "\nDatos extraídos:"
         )
 
-        # Agregar a la lista
-        documentos.append(documento)
+        print(
+            datos
+        )
 
-        # Guardar documento en Supabase
-        guardar_documento(documento)
 
-    # ==================================================
-    # RESUMEN DE DOCUMENTOS
-    # ==================================================
+        # ==============================
+        # NORMALIZAR DATOS
+        # ==============================
 
-    print("\n" + "=" * 60)
-    print("RESUMEN DE DOCUMENTOS")
-    print("=" * 60)
+        if "error" not in datos:
+
+            datos = normalizar(
+                datos
+            )
+
+
+        print(
+            "\nDatos normalizados:"
+        )
+
+        print(
+            datos
+        )
+
+
+        # ==============================
+        # CREAR DOCUMENTO
+        # ==============================
+
+        documento = Documento(
+
+            tipo=tipo,
+
+            archivo=archivo.name,
+
+            datos=datos
+
+        )
+
+
+        documentos.append(
+            documento
+        )
+
+
+        # ==============================
+        # GUARDAR DOCUMENTO
+        # ==============================
+
+        try:
+
+            guardar_documento(
+                documento
+            )
+
+            print(
+                "Documento guardado en Supabase."
+            )
+
+        except Exception as e:
+
+            print(
+                "Error guardando documento:"
+            )
+
+            print(
+                str(e)
+            )
+
+
+    # ==============================
+    # RESUMEN
+    # ==============================
+
+    print(
+        "\n" + "=" * 80
+    )
+
+    print(
+        "RESUMEN DE DOCUMENTOS"
+    )
+
+    print(
+        "=" * 80
+    )
 
     for doc in documentos:
 
@@ -144,48 +230,82 @@ def procesar_expediente(carpeta="documentos_prueba"):
             f"{doc.tipo} - {doc.archivo}"
         )
 
-    # ==================================================
-    # MOSTRAR DOCUMENTOS EXTRAÍDOS
-    # ==================================================
 
-    print("\n" + "=" * 60)
-    print("DOCUMENTOS EXTRAÍDOS")
-    print("=" * 60)
+    # ==============================
+    # MOSTRAR DATOS
+    # ==============================
+
+    print(
+        "\n===== DATOS EXTRAÍDOS ====="
+    )
 
     for doc in documentos:
 
-        print(f"\nArchivo: {doc.archivo}")
-        print(f"Tipo: {doc.tipo}")
-        print("Datos:")
+        print(
+            f"\nArchivo: {doc.archivo}"
+        )
 
-        print(doc.datos)
+        print(
+            f"Tipo: {doc.tipo}"
+        )
 
-    # ==================================================
+        print(
+            doc.datos
+        )
+
+
+    # ==============================
     # EJECUTAR VALIDACIONES
-    # ==================================================
+    # ==============================
 
-    print("\n" + "=" * 60)
-    print("VALIDACIONES")
-    print("=" * 60)
+    print(
+        "\n===== VALIDACIONES ====="
+    )
 
-    resultado = ejecutar_validaciones(documentos)
+    resultado = ejecutar_validaciones(
+        documentos
+    )
+
 
     for r in resultado:
 
-        print(r)
+        print(
+            r
+        )
 
-    # Guardar validaciones en Supabase
-    guardar_validaciones(resultado)
 
-    print("\nProceso terminado correctamente.")
+    # ==============================
+    # GUARDAR VALIDACIONES
+    # ==============================
 
-    # Devolver información a Streamlit
+    try:
+
+        guardar_validaciones(
+            resultado
+        )
+
+        print(
+            "\nValidaciones guardadas en Supabase."
+        )
+
+    except Exception as e:
+
+        print(
+            "\nError guardando validaciones:"
+        )
+
+        print(
+            str(e)
+        )
+
+
+    print(
+        "\nProceso terminado correctamente."
+    )
+
+
     return documentos, resultado
 
-
-# ==================================================
-# EJECUCIÓN DIRECTA
-# ==================================================
 
 if __name__ == "__main__":
 
@@ -195,13 +315,14 @@ if __name__ == "__main__":
     )
 
     print(
-        "Supabase URL:",
-        SUPABASE_URL
+        "Supabase URL cargada:",
+        SUPABASE_URL is not None
     )
 
     print(
         "Supabase Key cargada:",
         SUPABASE_KEY is not None
     )
+
 
     procesar_expediente()
